@@ -1,7 +1,8 @@
 (function() {
     const events = {
         AddToCart: () => handleEvent("AddToCart"),
-        Purchase: () => handleEvent("Purchase")
+        Purchase: () => handleEvent("Purchase"),
+        ViewContent: () => handleEvent("ViewContent")
     };
 
     const init = () => {
@@ -22,6 +23,18 @@
                 handleEvent(event);
             }
         });
+
+        // 添加滚动和页面活动监听器
+        document.addEventListener('scroll', handleViewContent);
+        document.addEventListener('mousemove', handleViewContent);
+        document.addEventListener('keydown', handleViewContent);
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // 添加点击 .yuri-cta 元素的监听器
+            document.querySelectorAll('.yuri-cta').forEach(function(element) {
+                element.addEventListener('click', handleAddToCartClick);
+            });
+        });
     };
 
     const handleEvent = (event, value) => {
@@ -31,23 +44,31 @@
             setCookie("__api", value);
         } else {
             const requestId = getCookie("__rid");
-            sendEvent({ requestId, event, value }, sendPixel, noop);
+            sendEvent({ requestId, event, value });
         }
     };
 
-    const sendPixel = (data) => {
-        if (data.pixel) {
-            createPixelImage(data);
-        }
+    const handleViewContent = () => {
+        document.removeEventListener('scroll', handleViewContent);
+        document.removeEventListener('mousemove', handleViewContent);
+        document.removeEventListener('keydown', handleViewContent);
+        handleEvent("ViewContent");
     };
 
-    const createPixelImage = (data) => {
-        const img = document.createElement("img");
-        img.style.display = "none";
-        img.height = 1;
-        img.width = 1;
-        img.src = `https://www.facebook.com/tr?id=${data.pixel}&ev=${data.event}&cd[value]=${data.value}&cd[currency]=USD&noscript=1`;
-        document.body.appendChild(img);
+    const handleAddToCartClick = (event) => {
+        handleEvent("AddToCart");
+    };
+
+    const sendEvent = (eventData) => {
+        const apiCookie = getCookie("__api");
+        const url = decrypt(atob(apiCookie), "yuri");
+
+        const data = new FormData();
+        data.append('_ajax', btoa(decrypt(JSON.stringify(eventData), "yuri")));
+
+        if (!navigator.sendBeacon(url, data)) {
+            console.error('Beacon send failed');
+        }
     };
 
     const setCookie = (name, value, days = 30) => {
@@ -64,31 +85,9 @@
         return new URLSearchParams(window.location.search).get(param) || "";
     };
 
-    const sendEvent = (eventData, onSuccess, onError) => {
-        const xhr = new XMLHttpRequest();
-        const apiCookie = getCookie("__api");
-        const url = decrypt(atob(apiCookie), "yuri");
-
-        xhr.open("POST", url, true);
-        xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
-        xhr.setRequestHeader("X-Requested-By", "Yuri");
-        xhr.withCredentials = true;
-
-        xhr.onload = () => {
-            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
-                const response = JSON.parse(xhr.responseText);
-                response.status === "success" ? onSuccess(response) : onError();
-            }
-        };
-
-        xhr.send(`_ajax=${btoa(decrypt(JSON.stringify(eventData), "yuri"))}`);
-    };
-
     const decrypt = (data, key) => {
         return [...data].map((char, index) => String.fromCharCode(char.charCodeAt(0) ^ key[index % key.length].charCodeAt(0))).join('');
     };
-
-    const noop = () => {};
 
     (() => {
         const scriptSrc = (document.currentScript || {}).src || "";
